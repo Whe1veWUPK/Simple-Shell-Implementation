@@ -5,30 +5,59 @@
 #include <dirent.h>
 #include <string.h>
 #include <ctype.h>
-
-//trim function 
-char* trim(char*command){
-
-    //trim the original command
-    size_t len = strlen(command);
-    while(len>0&& isspace(command[len-1])){
-        --len;
-    }
-    while(isspace(*command)){
-        ++command;
-        --len;
-    }
+#include <sys/wait.h>
+#include <sys/types.h>
 
 
-    //copy the command to new space
-    char *trimmed;
-    trimmed = (char *)malloc(len+1);
-    memcpy(trimmed, command, len);
-    trimmed[len] = '\0';
 
+int saved_stdout;//save the desriptor
+int saved_stdin;
 
-    return trimmed;
+//save the stdout and the stdin's desriptor
+void saveDescriptor(){
+    saved_stdout = dup(STDOUT_FILENO);
+    saved_stdin = dup(STDIN_FILENO);
 }
+
+void get_command(int argc,char**argv,char*command){
+
+    const char delimiter = ' ';
+    char temp[1024];
+    strcpy(temp, command);
+    for (int j = 0; j < (argc);++j){
+        if(j==0){
+            strcpy(argv[0], strtok(temp, &delimiter));
+            //printf("%s\n", argv[0]);
+        }
+        else{
+            strcpy(argv[j], strtok(NULL, &delimiter));
+            //printf("%s\n", argv[j]);
+        }
+    }
+}
+// //trim function 
+// void trim(char*command,char*trimmed){
+
+//     //trim the original command
+//     size_t len = strlen(command);
+//     while(len>0&& isspace(command[len-1])){
+//         --len;
+//     }
+//     while(isspace(*command)){
+//         ++command;
+//         --len;
+//     }
+
+
+//     //copy the command to new space
+    
+    
+//     memcpy(trimmed, command, len);
+//     trimmed[len] = '\0';
+
+
+//     return;
+// }
 
 //help command
 void help(int argc,char**argv){
@@ -221,47 +250,169 @@ void mv(int argc,char**argv){
 
 // redirect(maybe) implementation
 void redirect(char*command){
+    char buf[1024]; //temp store the command
+    strcpy(buf, command);
 
+    int argc = 0;
+    char **argv;
+    const char delimiter = ' ';
+    char *t=strtok(buf,&delimiter);   //calculate argc
+    while(t!=NULL){
+           //calculate argc   
+           ++argc;
+           t = strtok(NULL, &delimiter);
+    }
+
+    argv = (char **)malloc((argc+1) * sizeof(char *)); //initial argv
+    for (int i = 0; i < argc;++i){
+            argv[i] = (char *)malloc(strlen(command) + 1);
+    }
+    argv[argc] = NULL;
+
+    get_command(argc, argv, command); // get stoken
+    //printf("Argc argv over.\n");
+    //printf("%s\n", argv[0]);
+
+    int type = -1;  //initial type 
+    //type 3: command < infile 
+    //type 4: command > outfile
+    //type 5: command > outfile < infile
+    //type 6: command < outfile > infile
+    
+    size_t len = strlen(command);
+
+
+      
+    
+    // scan the command to determine the redirect type
+    for (int i = 0; i < len;++i){
+        if(command[i]=='<'){
+            if(type==-1){
+                type = 3;
+            }
+            else if(type==4){
+                type = 5;
+            }
+            else{
+                perror("Error: wrong redirect type!\n");
+            }
+        }
+        if(command[i]=='>'){
+            if(type==-1){
+                type = 4;
+            }
+            else if(type==3){
+                type = 6;
+            }
+            else{
+                perror("Error: wrong redirect type!\n");
+            }
+        }
+    }
+    //printf("Type is %d\n", type);
+    //printf("Reach here 259.\n");
+    if(type==-1){
+        //no redirect
+
+        //printf("no redirect!\n");
+        pid_t pid;
+        
+        if((pid=fork())==0){
+
+            //child process
+            if(execvp(argv[0], argv)==-1){
+                //perror("Error: execvp.\n");
+            }
+        
+        }
+        else{
+           //father process
+           waitpid(pid, NULL,0);
+           //printf("redirect father and child is Over.\n");
+        }
+   
+    }
+    //free the memory
+    for (int i = 0; i < argc;++i){
+            free(argv[i]);
+    }
+    free(argv);
+
+
+    
 }
 
 
 // pipeline implementation
-void pipeLine(char*command){
-    char *firstCommand = trim(strtok(command, "|")); //first command
-    char *otherCommands = trim(strtok(NULL, "")); //other commands
-    int status; // child process's return status
-    int fd[2]; // file descriptor
-    if(!otherCommands){
-        // if there is only one command
-        redirect(firstCommand);
+void pipeLine(int argc,char**argv,char*command){
+    char buf[1024];
+    char*firstCommand=(char*)malloc(strlen(command)+1);
+    char*otherCommands=(char*)malloc(strlen(command)+1);
+    strcpy(buf, command);
+    const char delimiter = '|';
+
+    //printf("Reach 287.\n");
+    strcpy(firstCommand,strtok(buf,&delimiter)); // first command;
+    //printf("Reach 289.\n");
+    if(strlen(command)==strlen(firstCommand)){
+        otherCommands = NULL;
     }
     else{
-        pipe(&fd); //create pipe
+        strcpy(otherCommands,strtok(NULL,"")); // other commands
+    }
+    //printf("Reach 291.\n");
+    // printf("%s\n", firstCommand);
+    // if(otherCommands!=NULL){
+    //     printf("%s\n", otherCommands);
+    // }
+    int fd[2]; // file descriptor
+
+
+    //printf("Reach 293.\n");
+    if(otherCommands==NULL){
+        //printf("Reach 295.\n");
+        // if there is only one command
+        //dup2(saved_stdout, STDOUT_FILENO);
+        
+        redirect(firstCommand);
+
+    }
+    else{
+        pipe(fd); //create pipe
         pid_t pid;
+        //printf("Reach 366.\n");
         if((pid=fork())==0){
             //child process
+            //printf("It is child process.\n");
             close(fd[0]);//close pipe output
-
-            dup2(fd[1],STDOUT_FILENO); //duplicate the fd[1] to STDOUT_FILENO
-
+            close(STDOUT_FILENO); // close stdout 
+            //printf("Close fd[0].\n");
+            dup(fd[1]); //duplicate the fd[1] to STDOUT_FILENO
+            //printf("dup2 Over.\n");
             close(fd[1]); //close fd[1]
-
+            //printf("Close fd[1].\n");
             redirect(firstCommand);
+
+           
+
+            //printf("ls over.\n");
         }
         else{
             //father process, excutes other commands recursively
             close(fd[1]); //close pipe input
-
-            dup2(fd[0], STDIN_FILENO); //duplicate the fd[0] to STDIN_FILENO
+            close(STDIN_FILENO); //close stdin
+            dup(fd[0]); //duplicate the fd[0] to STDIN_FILENO
 
             close(fd[0]); //close fd[0]
 
-            waitpid(pid, &status, 0);
+            waitpid(pid, NULL, 0);
 
-            pipeLine(otherCommands); //excuetes other commands recursively
+            pipeLine(argc,argv,otherCommands); //executes other commands recursively
+  
         }
 
     }
+    return;
 }
 
 
@@ -287,22 +438,7 @@ void print_prompt(char*prompt){
     
 }
 //get user's command
-void get_command(int argc,char**argv,char*command){
 
-    const char delimiter = ' ';
-    char temp[1024];
-    strcpy(temp, command);
-    for (int j = 0; j < (argc);++j){
-        if(j==0){
-            strcpy(argv[0], strtok(temp, &delimiter));
-            //printf("%s\n", argv[0]);
-        }
-        else{
-            strcpy(argv[j], strtok(NULL, &delimiter));
-            //printf("%s\n", argv[j]);
-        }
-    }
-}
 
 //deal the command
 void deal_command(int argc,char**argv,char*command){
@@ -347,25 +483,22 @@ void deal_command(int argc,char**argv,char*command){
        mv(argc, argv);
        return;
    }
-   
-   //ls command
-   if(strcmp(argv[0],"ls")==0){
-       ls(argc, argv);
-   }
-   
-   //external command (includes pipes and redirect)
 
+   //printf("Reach here 409.\n");
+   //external command (includes pipes and redirect)
+   pipeLine(argc, argv, command);
 
 }
 
 
 int main(){
+    saveDescriptor();
 
     while(1){
         char *command; // User input
         char prompt[1024]; //prompt info
         print_prompt(prompt);// display the command line prompt
-        rl_save_prompt();//save prompt info
+  
 
 
         int argc = 0;
