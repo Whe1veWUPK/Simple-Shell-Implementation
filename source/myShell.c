@@ -3,6 +3,32 @@
 #include <unistd.h>
 #include <readline/readline.h>
 #include <dirent.h>
+#include <string.h>
+#include <ctype.h>
+
+//trim function 
+char* trim(char*command){
+
+    //trim the original command
+    size_t len = strlen(command);
+    while(len>0&& isspace(command[len-1])){
+        --len;
+    }
+    while(isspace(*command)){
+        ++command;
+        --len;
+    }
+
+
+    //copy the command to new space
+    char *trimmed;
+    trimmed = (char *)malloc(len+1);
+    memcpy(trimmed, command, len);
+    trimmed[len] = '\0';
+
+
+    return trimmed;
+}
 
 //help command
 void help(int argc,char**argv){
@@ -193,10 +219,51 @@ void mv(int argc,char**argv){
     }
 }
 
-//ls command
-void ls(int argc,char*argv){
+// redirect(maybe) implementation
+void redirect(char*command){
 
 }
+
+
+// pipeline implementation
+void pipeLine(char*command){
+    char *firstCommand = trim(strtok(command, "|")); //first command
+    char *otherCommands = trim(strtok(NULL, "")); //other commands
+    int status; // child process's return status
+    int fd[2]; // file descriptor
+    if(!otherCommands){
+        // if there is only one command
+        redirect(firstCommand);
+    }
+    else{
+        pipe(&fd); //create pipe
+        pid_t pid;
+        if((pid=fork())==0){
+            //child process
+            close(fd[0]);//close pipe output
+
+            dup2(fd[1],STDOUT_FILENO); //duplicate the fd[1] to STDOUT_FILENO
+
+            close(fd[1]); //close fd[1]
+
+            redirect(firstCommand);
+        }
+        else{
+            //father process, excutes other commands recursively
+            close(fd[1]); //close pipe input
+
+            dup2(fd[0], STDIN_FILENO); //duplicate the fd[0] to STDIN_FILENO
+
+            close(fd[0]); //close fd[0]
+
+            waitpid(pid, &status, 0);
+
+            pipeLine(otherCommands); //excuetes other commands recursively
+        }
+
+    }
+}
+
 
 //Out put the command line prompt
 void print_prompt(char*prompt){
@@ -239,6 +306,9 @@ void get_command(int argc,char**argv,char*command){
 
 //deal the command
 void deal_command(int argc,char**argv,char*command){
+
+
+   //internal command
    //exit command
    if(strcmp(argv[0],"exit")==0){
        if(argc==1){
@@ -282,7 +352,10 @@ void deal_command(int argc,char**argv,char*command){
    if(strcmp(argv[0],"ls")==0){
        ls(argc, argv);
    }
-   system(command);
+   
+   //external command (includes pipes and redirect)
+
+
 }
 
 
