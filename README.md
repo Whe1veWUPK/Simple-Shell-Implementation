@@ -15,3 +15,9 @@ gcc -o xxx xxx.c -lreadline
 * ubuntu 22.04
 * VMware 
 * linux 6.6.4
+
+## Instruction
+```
+gcc myShell.c -o myShell -lreadline
+./myShell
+```
