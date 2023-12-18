@@ -579,7 +579,7 @@ void pipeLine(char*command){
 
 //Out put the command line prompt
 void print_prompt(char*prompt){
-    char *user_name = getlogin(); //the user nmae 
+    char *user_name = getlogin(); //the user name
     char host_name[256];
     gethostname(host_name, sizeof(host_name)); //get host name
     char cwd[4096];
@@ -598,7 +598,7 @@ void print_prompt(char*prompt){
     sprintf(prompt, "\033[0;35m%s@%s:%s%c \033[0m", user_name, host_name, cwd, userType);
     
 }
-//get user's command
+
 
 
 //deal the command
@@ -661,7 +661,7 @@ int main(){
         char prompt[1024]; //prompt info
         
         print_prompt(prompt);// display the command line prompt
-        //fprintf(stderr, "print_prompt over.\n");
+        
 
         int argc = 0;
         char **argv;
