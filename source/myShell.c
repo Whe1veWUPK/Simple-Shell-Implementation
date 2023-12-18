@@ -7,7 +7,8 @@
 #include <ctype.h>
 #include <sys/wait.h>
 #include <sys/types.h>
-
+#include <sys/stat.h>
+#include <fcntl.h>
 
 
 int saved_stdout=0;
@@ -42,7 +43,7 @@ void get_command(int argc,char**argv,char*command){
 
 //help command
 void help(int argc,char**argv){
-   //show all inner command
+   //show all internal command
    if(argc==1){
        printf("A simple shell implementation by whe1ve @version 1.0\n");
        printf("These shell commands are defined internally. Type 'help' to see the list.\n");
@@ -259,7 +260,9 @@ void redirect(char*command){
     //type 4: command > outfile
     //type 5: command > outfile < infile
     //type 6: command < outfile > infile
-    
+    int indexOfInfile = -1;
+    int indexOfOutfile = -1;
+
     size_t len = strlen(command);
 
 
@@ -290,8 +293,8 @@ void redirect(char*command){
             }
         }
     }
-    //printf("Type is %d\n", type);
-    //printf("Reach here 259.\n");
+    
+
     if(type==-1){
         //no redirect
 
@@ -313,6 +316,171 @@ void redirect(char*command){
         }
    
     }
+    else if(type == 3){
+        //type 3: command < infile
+        for (int i = 0; i < argc;++i){
+            if(strcmp(argv[i],"<")==0){
+                indexOfInfile = i + 1;
+                if(indexOfInfile>=argc){
+                    fprintf(stderr, "No input file.\n");
+                    
+                }
+                break;
+            }
+           
+        }
+        if(indexOfInfile<argc){
+            int fd = open(argv[indexOfInfile], O_RDWR|O_CREAT,0777);
+            dup2(fd, STDIN_FILENO); // redirect stdin to input file
+            close(fd);
+
+            argv[indexOfInfile-1] = NULL; // update command
+
+            pid_t pid;
+            if((pid=fork())==0){
+                //child process
+                if(execvp(argv[0],argv)==-1){
+                    perror("Error: execvp.\n");
+                }
+
+                
+                exit(0);//exit child process
+            }
+            else{
+                //father process
+                wait(NULL);
+
+            }
+        }
+    }
+    else if(type == 4){
+        //type 4: command > outfile
+        //perror("Reach type 4.\n");
+        for (int i = 0; i < argc;++i){
+            if(strcmp(argv[i],">")==0){
+                indexOfOutfile = i + 1;
+                if(indexOfOutfile>=argc){
+                    perror("Error: No output file.\n");
+                }
+                break;
+            }
+        }
+        if(indexOfOutfile<argc){
+            int fd = creat(argv[indexOfOutfile], 0644);
+            dup2(fd, STDOUT_FILENO); // redirect stdout to output file
+            close(fd);
+
+            argv[indexOfOutfile-1] = NULL;//update command
+
+
+
+            pid_t pid;
+            if((pid=fork())==0){
+                //child process
+                if(execvp(argv[0],argv)==-1){
+                    perror("Error: execvp.\n");
+                }
+
+                
+                exit(0); //exit child process
+            }
+            else{
+                //father process
+                wait(NULL);
+            }
+        }
+    }
+    else if(type == 5){
+        //type 5: command > outfile < infile
+        for (int i = 0; i < argc;++i){
+            if(strcmp(argv[i],">")==0){
+                indexOfOutfile = i + 1;
+                if(indexOfOutfile>=argc){
+                    perror("Error: No output file.\n");
+                }
+            }
+            if(strcmp(argv[i],"<")==0){
+                indexOfInfile = i + 1;
+                if(indexOfOutfile>=argc){
+                    perror("Error: No input file.\n");
+                }
+            }
+        }
+
+        if((indexOfInfile>0&&indexOfInfile<argc)&&(indexOfOutfile>0&&indexOfOutfile<argc)){
+            int fdin = open(argv[indexOfInfile], O_RDWR | O_CREAT, 0777); //redirect stdin
+            dup2(fdin, STDIN_FILENO);
+            close(fdin);
+
+            int fdout = creat(argv[indexOfOutfile], 0644); //redirect stdout
+            dup2(fdout, STDOUT_FILENO);
+            close(fdout);
+
+            argv[indexOfOutfile-1] = NULL; //update command
+
+            pid_t pid;
+            if((pid=fork())==0){
+                // child process
+                if(execvp(argv[0],argv)==-1){
+                    perror("Error: execvp.\n");
+                }
+
+                exit(0); //exit process
+            }
+            else{
+                //father process
+                wait(NULL);
+            }
+        }
+    }
+    else if(type == 6){
+    //type 6: command < infile > outfile
+        for (int i = 0; i < argc;++i){
+            if(strcmp(argv[i],">")==0){
+                indexOfOutfile = i + 1;
+                if(indexOfOutfile>=argc){
+                    perror("Error: No output file.\n");
+                }
+            }
+            if(strcmp(argv[i],"<")==0){
+                indexOfInfile = i + 1;
+                if(indexOfOutfile>=argc){
+                    perror("Error: No input file.\n");
+                }
+            }
+        }
+
+        if((indexOfInfile>0&&indexOfInfile<argc)&&(indexOfOutfile>0&&indexOfOutfile<argc)){
+            int fdin = open(argv[indexOfInfile], O_RDWR | O_CREAT, 0777); //redirect stdin
+            dup2(fdin, STDIN_FILENO);
+            close(fdin);
+
+            int fdout = creat(argv[indexOfOutfile], 0644); //redirect stdout
+            dup2(fdout, STDOUT_FILENO);
+            close(fdout);
+
+            argv[indexOfInfile-1] = NULL; //update command
+
+            pid_t pid;
+            if((pid=fork())==0){
+                // child process
+                if(execvp(argv[0],argv)==-1){
+                    perror("Error: execvp.\n");
+                }
+
+                exit(0); //exit process
+            }
+            else{
+                //father process
+                wait(NULL);
+            }
+        }
+    }
+    else{
+        perror("Error: redirect type error.\n");
+    }
+
+
     //free the memory
     for (int i = 0; i < argc;++i){
             free(argv[i]);
@@ -349,7 +517,7 @@ void pipeLine(char*command){
         // only one command 
         redirect(firstCommand);
 
-        return;
+
     }
     else{
         pipe(fd); //create pipe
